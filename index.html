@@ -117,8 +117,19 @@
       <select id="meal-type" style="margin-top:12px">
         <option>Café da manhã</option><option>Almoço</option><option>Lanche</option><option>Jantar</option>
       </select>
-      <textarea id="meal-text" rows="2" placeholder="Descreva o que comeu" style="margin-top:8px"></textarea>
-      <button class="btn secondary" id="add-meal-btn" style="margin-top:8px">Adicionar refeição</button>
+      <textarea id="meal-text" rows="2" placeholder="Descreva o que comeu (ex: 2 ovos mexidos e uma fatia de pão integral)" style="margin-top:8px"></textarea>
+      <button class="btn secondary" id="add-meal-ia-btn" style="margin-top:6px">Calcular com IA</button>
+      <div style="display:flex;align-items:center;gap:8px;margin:10px 0"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--text-muted)">ou buscar no banco</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+      <input type="text" id="meal-search" placeholder="Buscar alimento..." autocomplete="off">
+      <div id="meal-suggestions" style="display:none;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:160px;overflow-y:auto"></div>
+      <div id="meal-selected" style="display:none;margin-top:8px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--gold);border-radius:8px">
+        <p id="meal-selected-name" style="font-size:13px;color:var(--gold);margin-bottom:8px"></p>
+        <div class="row">
+          <div><label style="margin-top:0">Quantidade (g)</label><input type="number" id="meal-qty" value="100" min="1"></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn" id="add-meal-btn" style="margin-top:0">Adicionar</button></div>
+        </div>
+        <p id="meal-preview" style="font-size:12px;color:var(--text-muted);margin-top:6px"></p>
+      </div>
       <p class="status-msg" id="meal-status" style="display:none"></p>
       <div id="meals-list" style="margin-top:10px"></div>
 
@@ -470,34 +481,141 @@ function renderRefeicoes(){
     list.appendChild(div);
   });
 }
-renderRefeicoes();
-document.getElementById('add-meal-btn').addEventListener('click', async function(){
+// Banco de alimentos (por 100g, fonte TACO)
+const ALIMENTOS = [
+  {n:'Ovo de galinha cozido', kcal:149, prot:13.3, carb:0.6, gord:10.6},
+  {n:'Ovo de galinha mexido', kcal:170, prot:12.5, carb:1.2, gord:13.0},
+  {n:'Frango peito grelhado', kcal:159, prot:32.0, carb:0, gord:2.5},
+  {n:'Carne moída refogada', kcal:219, prot:25.9, carb:0, gord:12.4},
+  {n:'Carne bovina grelhada', kcal:219, prot:28.0, carb:0, gord:11.5},
+  {n:'Sobrecoxa frango sem pele assada', kcal:167, prot:27.1, carb:0, gord:6.1},
+  {n:'Coxa frango sem pele cozida', kcal:151, prot:23.5, carb:0, gord:5.8},
+  {n:'Filé de peixe grelhado', kcal:108, prot:22.5, carb:0, gord:1.9},
+  {n:'Lombo de porco assado', kcal:196, prot:26.5, carb:0, gord:9.7},
+  {n:'Arroz branco cozido', kcal:128, prot:2.5, carb:28.1, gord:0.2},
+  {n:'Arroz integral cozido', kcal:124, prot:2.6, carb:25.8, gord:1.0},
+  {n:'Batata doce cozida', kcal:77, prot:1.4, carb:18.4, gord:0.1},
+  {n:'Batata inglesa cozida', kcal:52, prot:1.2, carb:11.9, gord:0.1},
+  {n:'Mandioca cozida', kcal:125, prot:0.8, carb:30.1, gord:0.1},
+  {n:'Macarrão cozido', kcal:148, prot:4.9, carb:29.8, gord:1.0},
+  {n:'Pão de forma integral', kcal:243, prot:9.4, carb:43.9, gord:3.5},
+  {n:'Tapioca (goma seca)', kcal:347, prot:0.2, carb:86.4, gord:0.0},
+  {n:'Aveia em flocos', kcal:394, prot:13.9, carb:66.6, gord:8.5},
+  {n:'Granola', kcal:394, prot:8.0, carb:65.0, gord:11.0},
+  {n:'Whey protein (pó)', kcal:380, prot:75.0, carb:8.0, gord:5.0},
+  {n:'Banana prata', kcal:98, prot:1.3, carb:26.0, gord:0.1},
+  {n:'Maçã', kcal:56, prot:0.3, carb:15.2, gord:0.1},
+  {n:'Uva', kcal:69, prot:0.6, carb:17.9, gord:0.1},
+  {n:'Laranja', kcal:37, prot:0.9, carb:8.9, gord:0.1},
+  {n:'Mamão papaia', kcal:40, prot:0.5, carb:10.4, gord:0.1},
+  {n:'Azeite de oliva', kcal:884, prot:0, carb:0, gord:100},
+  {n:'Óleo vegetal', kcal:884, prot:0, carb:0, gord:100},
+  {n:'Feijão cozido', kcal:76, prot:4.8, carb:13.6, gord:0.5},
+  {n:'Lentilha cozida', kcal:93, prot:6.3, carb:16.3, gord:0.5},
+  {n:'Proteína de soja texturizada hidratada', kcal:52, prot:7.7, carb:3.7, gord:0.7},
+  {n:'Queijo minas frescal', kcal:264, prot:17.4, carb:3.2, gord:20.2},
+  {n:'Iogurte natural integral', kcal:61, prot:3.5, carb:4.9, gord:3.3},
+  {n:'Leite integral', kcal:61, prot:3.2, carb:4.5, gord:3.2},
+  {n:'Abóbora cozida', kcal:19, prot:0.8, carb:4.3, gord:0.1},
+  {n:'Brócolis cozido', kcal:26, prot:3.5, carb:2.9, gord:0.3},
+  {n:'Cenoura cozida', kcal:33, prot:0.7, carb:7.8, gord:0.1},
+  {n:'Alface', kcal:11, prot:1.3, carb:1.7, gord:0.2},
+  {n:'Tomate', kcal:15, prot:0.9, carb:3.1, gord:0.2},
+  {n:'Vitaminas (comprimido)', kcal:0, prot:0, carb:0, gord:0},
+];
+
+let selectedFood = null;
+
+document.getElementById('add-meal-ia-btn').addEventListener('click', async function(){
   const textEl = document.getElementById('meal-text');
   const typeEl = document.getElementById('meal-type');
   const statusEl = document.getElementById('meal-status');
   const text = textEl.value.trim();
   if(!text) return;
   statusEl.style.display = 'block';
-  statusEl.textContent = 'Calculando estimativa...';
+  statusEl.textContent = 'Calculando com IA...';
   this.disabled = true;
   try{
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1000, messages:[{role:'user', content:'Estime os valores nutricionais aproximados desta refeição em português, baseado em tabelas nutricionais padrão (TACO/USDA). Responda APENAS com JSON puro, sem markdown: {"kcal": numero, "prot": numero, "carb": numero, "gord": numero}. Refeição: ' + text}] })
+    const response = await fetch('/api/nutricao', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ refeicao: text })
     });
-    const data = await response.json();
-    const textBlock = data.content.find(b => b.type === 'text');
-    const clean = textBlock.text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    const parsed = await response.json();
+    if(parsed.error) throw new Error(parsed.error);
     const refeicao = { type: typeEl.value, text: text, kcal: parsed.kcal||0, prot: parsed.prot||0, carb: parsed.carb||0, gord: parsed.gord||0 };
     refeicoes.push(refeicao);
     saveLocal('refeicoes_' + todayKey(), refeicoes);
     renderRefeicoes();
-    await sendToSheet('Nutricao', {'Data':todayKey(),'Refeicao':refeicao.type,'Descricao':refeicao.text,'Calorias':refeicao.kcal,'Proteina (g)':refeicao.prot,'Carboidrato (g)':refeicao.carb,'Gordura (g)':refeicao.gord});
+    await sendToSheet('Nutricao', {'Data':todayKey(),'Refeicao':refeicao.type,'Descricao':refeicao.text,'Calorias':Math.round(refeicao.kcal),'Proteina (g)':refeicao.prot.toFixed(1),'Carboidrato (g)':refeicao.carb.toFixed(1),'Gordura (g)':refeicao.gord.toFixed(1)});
     textEl.value = '';
     statusEl.style.display = 'none';
-  }catch(err){ statusEl.textContent = 'Não consegui calcular agora. Tenta de novo.'; }
-  finally{ this.disabled = false; }
+  }catch(err){
+    statusEl.textContent = 'Não consegui calcular. Tenta o banco de alimentos.';
+  }finally{
+    this.disabled = false;
+  }
+});
+
+const searchEl = document.getElementById('meal-search');
+const suggestionsEl = document.getElementById('meal-suggestions');
+const selectedEl = document.getElementById('meal-selected');
+const selectedNameEl = document.getElementById('meal-selected-name');
+const previewEl = document.getElementById('meal-preview');
+const qtyEl = document.getElementById('meal-qty');
+
+searchEl.addEventListener('input', function(){
+  const q = this.value.trim().toLowerCase();
+  if(q.length < 2){ suggestionsEl.style.display='none'; return; }
+  const matches = ALIMENTOS.filter(a => a.n.toLowerCase().includes(q)).slice(0,8);
+  if(matches.length === 0){ suggestionsEl.style.display='none'; return; }
+  suggestionsEl.innerHTML = '';
+  matches.forEach(function(a){
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px';
+    div.textContent = a.n;
+    div.addEventListener('click', function(){
+      selectedFood = a;
+      selectedNameEl.textContent = a.n;
+      updatePreview();
+      suggestionsEl.style.display = 'none';
+      selectedEl.style.display = 'block';
+      searchEl.value = '';
+    });
+    suggestionsEl.appendChild(div);
+  });
+  suggestionsEl.style.display = 'block';
+});
+
+function updatePreview(){
+  if(!selectedFood) return;
+  const qty = parseFloat(qtyEl.value) || 100;
+  const factor = qty / 100;
+  previewEl.textContent = Math.round(selectedFood.kcal*factor) + ' kcal · P ' + (selectedFood.prot*factor).toFixed(1) + 'g · C ' + (selectedFood.carb*factor).toFixed(1) + 'g · G ' + (selectedFood.gord*factor).toFixed(1) + 'g';
+}
+qtyEl.addEventListener('input', updatePreview);
+
+renderRefeicoes();
+document.getElementById('add-meal-btn').addEventListener('click', async function(){
+  if(!selectedFood) return;
+  const qty = parseFloat(qtyEl.value) || 100;
+  const factor = qty / 100;
+  const typeEl = document.getElementById('meal-type');
+  const refeicao = {
+    type: typeEl.value,
+    text: selectedFood.n + ' ' + qty + 'g',
+    kcal: selectedFood.kcal * factor,
+    prot: selectedFood.prot * factor,
+    carb: selectedFood.carb * factor,
+    gord: selectedFood.gord * factor
+  };
+  refeicoes.push(refeicao);
+  saveLocal('refeicoes_' + todayKey(), refeicoes);
+  renderRefeicoes();
+  selectedEl.style.display = 'none';
+  selectedFood = null;
+  qtyEl.value = 100;
+  await sendToSheet('Nutricao', {'Data':todayKey(),'Refeicao':refeicao.type,'Descricao':refeicao.text,'Calorias':Math.round(refeicao.kcal),'Proteina (g)':refeicao.prot.toFixed(1),'Carboidrato (g)':refeicao.carb.toFixed(1),'Gordura (g)':refeicao.gord.toFixed(1)});
 });
 document.getElementById('nutri-toggle').addEventListener('click', function(){
   const el = document.getElementById('nutri-suggestion');
